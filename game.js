@@ -1,247 +1,370 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const GRAVITY      = -18;
-const FLAP_VEL     =  8;
-const PIPE_SPEED   =  5;
-const PIPE_GAP     =  3.2;
-const PIPE_INTERVAL = 2.4; // seconds between pipes
-const BIRD_X       = -3;
-const PIPE_X_START =  8;
-const PIPE_W       =  1.1;
-const FLOOR_Y      = -5;
-const CEIL_Y       =  5;
+// ── Config ─────────────────────────────────────────────────────────────────
+const CFG = {
+  gravity:       -20,
+  flapVel:        8.5,
+  pipeSpeed:      5.2,     // starting speed
+  pipeSpeedMax:   9.5,
+  pipeSpeedGain:  0.12,    // per pipe passed
+  pipeGap:        3.0,
+  pipeInterval:   2.3,     // seconds
+  pipeIntervalMin:1.5,
+  pipeIntervalDec:0.015,   // per pipe passed
+  birdX:         -3,
+  pipeXStart:     9,
+  pipeW:          1.1,
+  floorY:        -5.2,
+  ceilY:          5.2,
+};
 
-// ── Scene Setup ────────────────────────────────────────────────────────────
+// ── Renderer ───────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 
 const scene  = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
-scene.fog = new THREE.Fog(0x0d1117, 18, 35);
+scene.background = new THREE.Color(0x080c12);
+scene.fog = new THREE.FogExp2(0x080c12, 0.022);
 
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
-camera.position.set(0, 0, 14);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
+camera.position.set(0, 0, 15);
 
-function resize() {
+function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-window.addEventListener('resize', resize);
-resize();
+window.addEventListener('resize', onResize);
+onResize();
 
 // ── Lighting ───────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x334466, 1.2));
-const sun = new THREE.DirectionalLight(0x88aaff, 2.5);
-sun.position.set(5, 10, 8);
-sun.castShadow = true;
-scene.add(sun);
-const rimLight = new THREE.PointLight(0x4488ff, 1.5, 20);
-rimLight.position.set(-6, 3, 5);
-scene.add(rimLight);
+scene.add(new THREE.AmbientLight(0x223355, 1.5));
+const key = new THREE.DirectionalLight(0x99bbff, 2.8);
+key.position.set(6, 12, 10);
+key.castShadow = true;
+scene.add(key);
+const rim = new THREE.PointLight(0x4466ff, 2.0, 22);
+rim.position.set(-8, 4, 6);
+scene.add(rim);
+const glow = new THREE.PointLight(0xff9944, 1.2, 14);
+glow.position.set(CFG.birdX, 0, 3);
+scene.add(glow); // follows bird loosely
 
-// ── Scrolling Background Stars ─────────────────────────────────────────────
-const starGeo = new THREE.BufferGeometry();
-const starVerts = [];
-for (let i = 0; i < 800; i++) {
-  starVerts.push((Math.random() - 0.5) * 60, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 10 - 5);
+// ── Stars ──────────────────────────────────────────────────────────────────
+{
+  const geo = new THREE.BufferGeometry();
+  const v = [];
+  for (let i = 0; i < 1200; i++)
+    v.push((Math.random()-0.5)*80, (Math.random()-0.5)*25, -(Math.random()*12+3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.055, transparent: true, opacity: 0.7 })));
 }
-starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
-scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.06 })));
 
-// ── Ground / Ceiling ───────────────────────────────────────────────────────
-function makeSlab(y, color) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(100, 0.4, 4),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
+// ── Floor / Ceiling Slabs ──────────────────────────────────────────────────
+function makeSlab(y) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(120, 0.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0x0f1b2d, roughness: 0.9, metalness: 0.3 })
   );
-  mesh.position.set(0, y, 0);
-  scene.add(mesh);
+  m.position.set(0, y, 0);
+  m.receiveShadow = true;
+  scene.add(m);
 }
-makeSlab(FLOOR_Y - 0.2, 0x1a2233);
-makeSlab(CEIL_Y + 0.2, 0x1a2233);
+makeSlab(CFG.floorY - 0.25);
+makeSlab(CFG.ceilY  + 0.25);
 
-// ── Pipe Pool ──────────────────────────────────────────────────────────────
-const PIPE_MAT = new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.6, metalness: 0.4 });
-const PIPE_HEIGHT = 12;
+// ── Pipes ──────────────────────────────────────────────────────────────────
+const PIPE_MAT = new THREE.MeshStandardMaterial({
+  color: 0x1a3050, roughness: 0.5, metalness: 0.6
+});
+const PIPE_H = 14;
+const pipePool = [];
+const activePipes = [];
 
-function makePipeMesh() {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(PIPE_W, PIPE_HEIGHT, 1.5), PIPE_MAT);
+function getPipeMesh() {
+  if (pipePool.length) return pipePool.pop();
+  const m = new THREE.Mesh(new THREE.BoxGeometry(CFG.pipeW, PIPE_H, 1.8), PIPE_MAT);
   m.castShadow = true;
   return m;
 }
 
-const pipes = []; // { top, bot, x, passed }
-
-function spawnPipe() {
-  const gapCenter = (Math.random() - 0.5) * (CEIL_Y - FLOOR_Y - PIPE_GAP - 2) + (FLOOR_Y + CEIL_Y) / 2;
-  const top = makePipeMesh();
-  const bot = makePipeMesh();
-  top.position.set(PIPE_X_START, gapCenter + PIPE_GAP / 2 + PIPE_HEIGHT / 2, 0);
-  bot.position.set(PIPE_X_START, gapCenter - PIPE_GAP / 2 - PIPE_HEIGHT / 2, 0);
-  scene.add(top, bot);
-  pipes.push({ top, bot, x: PIPE_X_START, passed: false });
+function releasePipe(p) {
+  scene.remove(p.top, p.bot);
+  pipePool.push(p.top, p.bot);
+  const idx = activePipes.indexOf(p);
+  if (idx !== -1) activePipes.splice(idx, 1);
 }
 
-function removePipe(p) {
-  scene.remove(p.top, p.bot);
-  p.top.geometry.dispose();
-  p.bot.geometry.dispose();
+function spawnPipe() {
+  const range   = (CFG.ceilY - CFG.floorY) - CFG.pipeGap - 2.5;
+  const mid     = (CFG.ceilY + CFG.floorY) / 2;
+  const gapY    = mid + (Math.random() - 0.5) * range;
+  const top     = getPipeMesh();
+  const bot     = getPipeMesh();
+  top.position.set(CFG.pipeXStart, gapY + CFG.pipeGap / 2 + PIPE_H / 2, 0);
+  bot.position.set(CFG.pipeXStart, gapY - CFG.pipeGap / 2 - PIPE_H / 2, 0);
+  scene.add(top, bot);
+  activePipes.push({ top, bot, x: CFG.pipeXStart, gapY, passed: false });
 }
 
 // ── Bird ───────────────────────────────────────────────────────────────────
-let bird = null;         // GLB group
-let birdFallback = null; // fallback box if GLB fails
-
 const birdGroup = new THREE.Group();
-birdGroup.position.set(BIRD_X, 0, 0);
+birdGroup.position.set(CFG.birdX, 0, 0);
 scene.add(birdGroup);
 
-const loader = new GLTFLoader();
-loader.load(
-  './assets/Bird_1_by_get3dmodels.glb',
-  (gltf) => {
-    bird = gltf.scene;
-    // Scale and orient — raven model faces +Z by default
-    bird.scale.set(0.6, 0.6, 0.6);
-    bird.rotation.y = Math.PI;
-    birdGroup.add(bird);
-  },
-  undefined,
-  () => {
-    // Fallback: simple black box
-    birdFallback = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.5, 0.5),
-      new THREE.MeshStandardMaterial({ color: 0x111111 })
-    );
-    birdGroup.add(birdFallback);
-  }
+// Fallback mesh shown until GLB loads
+const fallback = new THREE.Mesh(
+  new THREE.SphereGeometry(0.38, 8, 6),
+  new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.4 })
 );
+birdGroup.add(fallback);
 
-// ── Particle burst on flap ─────────────────────────────────────────────────
-const particles = [];
-const PART_MAT = new THREE.PointsMaterial({ color: 0x8899ff, size: 0.12, transparent: true });
+let birdModel = null;
+const gltfLoader = new GLTFLoader();
+gltfLoader.load('./assets/Bird_1_by_get3dmodels.glb', (gltf) => {
+  birdModel = gltf.scene;
+  birdModel.scale.set(0.55, 0.55, 0.55);
+  birdModel.rotation.y = Math.PI;
+  birdGroup.add(birdModel);
+  birdGroup.remove(fallback);
+});
 
-function spawnParticles() {
+// ── Trail Particles ────────────────────────────────────────────────────────
+const TRAIL_MAT = new THREE.PointsMaterial({
+  color: 0x6688ee, size: 0.13, transparent: true, depthWrite: false
+});
+const trailParticles = [];
+
+function emitTrail() {
   const geo = new THREE.BufferGeometry();
-  const verts = [];
-  for (let i = 0; i < 12; i++) {
-    verts.push(BIRD_X + (Math.random() - 0.5) * 0.6,
-               birdGroup.position.y + (Math.random() - 0.5) * 0.6,
-               (Math.random() - 0.5) * 0.4);
+  const v = [];
+  for (let i = 0; i < 8; i++) {
+    v.push(
+      birdGroup.position.x + (Math.random()-0.5)*0.5,
+      birdGroup.position.y + (Math.random()-0.5)*0.5,
+      (Math.random()-0.5)*0.3
+    );
   }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  const pts = new THREE.Points(geo, PART_MAT.clone());
-  pts.userData.life = 0.4;
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  const mat = TRAIL_MAT.clone();
+  const pts = new THREE.Points(geo, mat);
+  pts.userData.life = 0.35;
   scene.add(pts);
-  particles.push(pts);
+  trailParticles.push(pts);
+}
+
+function updateTrail(dt) {
+  for (let i = trailParticles.length - 1; i >= 0; i--) {
+    const p = trailParticles[i];
+    p.userData.life -= dt;
+    p.material.opacity = p.userData.life / 0.35;
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      p.geometry.dispose();
+      p.material.dispose();
+      trailParticles.splice(i, 1);
+    }
+  }
+}
+
+// ── Explosion on death ─────────────────────────────────────────────────────
+const deathParticles = [];
+
+function spawnExplosion() {
+  const geo = new THREE.BufferGeometry();
+  const v = [];
+  for (let i = 0; i < 40; i++) {
+    v.push(
+      birdGroup.position.x + (Math.random()-0.5)*0.8,
+      birdGroup.position.y + (Math.random()-0.5)*0.8,
+      (Math.random()-0.5)*0.8
+    );
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xff5533, size: 0.18, transparent: true });
+  const pts = new THREE.Points(geo, mat);
+  pts.userData.life = 0.8;
+  pts.userData.vel  = new THREE.Vector3(
+    (Math.random()-0.5)*2, (Math.random()-0.5)*2, 0
+  );
+  scene.add(pts);
+  deathParticles.push(pts);
+}
+
+function updateExplosion(dt) {
+  for (let i = deathParticles.length-1; i >= 0; i--) {
+    const p = deathParticles[i];
+    p.userData.life -= dt;
+    p.material.opacity = p.userData.life / 0.8;
+    p.position.addScaledVector(p.userData.vel, dt);
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      p.geometry.dispose();
+      p.material.dispose();
+      deathParticles.splice(i, 1);
+    }
+  }
+}
+
+// ── Score persistence ──────────────────────────────────────────────────────
+let highScore = parseInt(localStorage.getItem('fc_hs') || '0', 10);
+
+function saveHS(s) {
+  if (s > highScore) {
+    highScore = s;
+    localStorage.setItem('fc_hs', s);
+  }
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let state = 'idle'; // idle | playing | dead
-let velY = 0;
-let score = 0;
-let pipeTimer = 0;
-let clock = new THREE.Clock();
+let state      = 'idle'; // idle | playing | dead
+let velY       = 0;
+let score      = 0;
+let pipeTimer  = 0;
+let currentSpeed    = CFG.pipeSpeed;
+let currentInterval = CFG.pipeInterval;
+let trailTimer = 0;
 
-const overlay    = document.getElementById('overlay');
-const scoreEl    = document.getElementById('score');
+const overlay = document.getElementById('overlay');
+const scoreEl = document.getElementById('score');
 
-function startGame() {
-  if (state === 'playing') return;
-  state = 'playing';
-  velY = 0;
-  birdGroup.position.y = 0;
-  birdGroup.rotation.z = 0;
-  score = 0;
-  pipeTimer = 0;
-  // Clear existing pipes
-  pipes.forEach(removePipe);
-  pipes.length = 0;
-  // Hide overlay
-  overlay.style.display = 'none';
-  scoreEl.style.display = 'block';
-  scoreEl.textContent = '0';
-  clock.start();
-}
-
-function flap() {
-  if (state === 'idle' || state === 'dead') { startGame(); return; }
-  velY = FLAP_VEL;
-  spawnParticles();
-}
-
-function die() {
-  state = 'dead';
-  scoreEl.style.display = 'none';
+function showIdle() {
   overlay.innerHTML = `
     <h1>🐦‍⬛ Flappy Corvus</h1>
-    <div class="final-score">Score: ${score}</div>
+    <div class="sub">tap or press space to flap</div>
+    ${highScore > 0 ? `<div class="sub" style="color:#e0c97f">best: ${highScore}</div>` : ''}
+    <div class="prompt">tap / space to start</div>
+  `;
+  overlay.style.display = 'flex';
+}
+
+function showDead() {
+  const isNew = score > 0 && score >= highScore;
+  overlay.innerHTML = `
+    <h1>🐦‍⬛ Flappy Corvus</h1>
+    <div class="final-score">score: ${score}</div>
+    ${isNew ? '<div class="sub" style="color:#e0c97f">✨ new best!</div>' : `<div class="sub">best: ${highScore}</div>`}
     <div class="sub">you got wiped</div>
     <div class="prompt">tap / space to try again</div>
   `;
   overlay.style.display = 'flex';
 }
 
-// ── Input ──────────────────────────────────────────────────────────────────
-window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); flap(); } });
-window.addEventListener('pointerdown', flap);
+function resetGame() {
+  // clear pipes
+  [...activePipes].forEach(releasePipe);
+  activePipes.length = 0;
 
-// ── Collision (AABB) ───────────────────────────────────────────────────────
+  birdGroup.position.set(CFG.birdX, 0, 0);
+  birdGroup.rotation.z = 0;
+  velY            = 0;
+  score           = 0;
+  pipeTimer       = 0;
+  trailTimer      = 0;
+  currentSpeed    = CFG.pipeSpeed;
+  currentInterval = CFG.pipeInterval;
+
+  overlay.style.display = 'none';
+  scoreEl.style.display = 'block';
+  scoreEl.textContent   = '0';
+  state = 'playing';
+}
+
+function flap() {
+  if (state === 'idle' || state === 'dead') { resetGame(); return; }
+  if (state === 'playing') {
+    velY = CFG.flapVel;
+    emitTrail();
+  }
+}
+
+function die() {
+  state = 'dead';
+  saveHS(score);
+  scoreEl.style.display = 'none';
+  spawnExplosion();
+  showDead();
+}
+
+// ── Input ──────────────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); flap(); }
+});
+window.addEventListener('pointerdown', e => {
+  // ignore clicks on overlay buttons etc
+  flap();
+});
+
+// ── Collision ──────────────────────────────────────────────────────────────
 function checkCollision() {
   const by = birdGroup.position.y;
-  const bx = BIRD_X;
-  const br = 0.32; // bird radius
+  const bx = CFG.birdX;
+  const br = 0.30;
 
-  if (by - br <= FLOOR_Y || by + br >= CEIL_Y) return true;
+  if (by - br <= CFG.floorY || by + br >= CFG.ceilY) return true;
 
-  for (const p of pipes) {
-    if (Math.abs(bx - p.x) < PIPE_W / 2 + br) {
-      const gapCenter = p.top.position.y - PIPE_HEIGHT / 2 - PIPE_GAP / 2;
-      if (by > gapCenter + PIPE_GAP / 2 - br || by < gapCenter - PIPE_GAP / 2 + br) return true;
+  for (const p of activePipes) {
+    if (Math.abs(bx - p.x) < CFG.pipeW / 2 + br) {
+      if (by > p.gapY + CFG.pipeGap / 2 - br || by < p.gapY - CFG.pipeGap / 2 + br) return true;
     }
   }
   return false;
 }
 
-// ── Main Loop ──────────────────────────────────────────────────────────────
+// ── Clock ──────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+// ── Render loop ────────────────────────────────────────────────────────────
+showIdle();
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
 
   if (state === 'playing') {
     // Physics
-    velY += GRAVITY * dt;
+    velY += CFG.gravity * dt;
     birdGroup.position.y += velY * dt;
 
-    // Tilt bird
-    const tilt = THREE.MathUtils.clamp(velY * 0.06, -0.8, 0.4);
-    birdGroup.rotation.z = tilt;
+    // Tilt
+    const targetZ = THREE.MathUtils.clamp(velY * 0.065, -0.9, 0.5);
+    birdGroup.rotation.z += (targetZ - birdGroup.rotation.z) * 18 * dt;
+
+    // Glow follows bird
+    glow.position.set(CFG.birdX, birdGroup.position.y, 3);
+    glow.intensity = 1.2 + Math.sin(Date.now() * 0.005) * 0.3;
+
+    // Trail
+    trailTimer += dt;
+    if (trailTimer > 0.06) { emitTrail(); trailTimer = 0; }
 
     // Pipes
     pipeTimer += dt;
-    if (pipeTimer >= PIPE_INTERVAL) { spawnPipe(); pipeTimer = 0; }
+    if (pipeTimer >= currentInterval) {
+      spawnPipe();
+      pipeTimer = 0;
+    }
 
-    for (let i = pipes.length - 1; i >= 0; i--) {
-      const p = pipes[i];
-      p.x -= PIPE_SPEED * dt;
+    for (let i = activePipes.length - 1; i >= 0; i--) {
+      const p = activePipes[i];
+      p.x -= currentSpeed * dt;
       p.top.position.x = p.x;
       p.bot.position.x = p.x;
 
-      if (!p.passed && p.x < BIRD_X) {
+      if (!p.passed && p.x < CFG.birdX) {
         p.passed = true;
         score++;
         scoreEl.textContent = score;
-        // Gradually increase speed
-        // PIPE_SPEED handled via closure below
+        // Increase difficulty
+        currentSpeed    = Math.min(CFG.pipeSpeedMax, currentSpeed + CFG.pipeSpeedGain);
+        currentInterval = Math.max(CFG.pipeIntervalMin, currentInterval - CFG.pipeIntervalDec);
       }
 
-      if (p.x < -12) { removePipe(p); pipes.splice(i, 1); }
+      if (p.x < -13) releasePipe(p);
     }
 
     if (checkCollision()) die();
@@ -249,16 +372,12 @@ function animate() {
 
   // Idle bob
   if (state === 'idle') {
-    birdGroup.position.y = Math.sin(Date.now() * 0.002) * 0.5;
+    birdGroup.position.y = Math.sin(Date.now() * 0.0018) * 0.6;
+    birdGroup.rotation.z = Math.sin(Date.now() * 0.0025) * 0.08;
   }
 
-  // Particles
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.userData.life -= dt;
-    p.material.opacity = p.userData.life / 0.4;
-    if (p.userData.life <= 0) { scene.remove(p); p.geometry.dispose(); particles.splice(i, 1); }
-  }
+  updateTrail(dt);
+  updateExplosion(dt);
 
   renderer.render(scene, camera);
 }

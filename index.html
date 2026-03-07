@@ -6,39 +6,44 @@
   <title>Flappy Corvus</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0a0a0f; overflow: hidden; font-family: monospace; }
-    #canvas { display: block; width: 100vw; height: 100vh; }
-    #ui {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; pointer-events: none;
-    }
+    body { background: #080c12; overflow: hidden; font-family: monospace; user-select: none; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+
     #score {
-      position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
-      color: #fff; font-size: 2.5em; font-weight: bold; text-shadow: 0 2px 8px #000;
-      letter-spacing: 2px;
+      display: none;
+      position: fixed;
+      top: 22px; left: 50%; transform: translateX(-50%);
+      color: #fff; font-size: 2.8em; font-weight: bold;
+      text-shadow: 0 0 12px #4466ff, 0 2px 6px #000;
+      letter-spacing: 3px; pointer-events: none;
     }
+
     #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.75);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      color: #fff; text-align: center;
+      position: fixed; inset: 0;
+      background: rgba(4, 8, 16, 0.82);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #fff; text-align: center; gap: 0.4em;
     }
-    #overlay h1 { font-size: 3em; margin-bottom: 0.2em; letter-spacing: 3px; }
-    #overlay .sub { font-size: 1.1em; color: #aaa; margin-bottom: 2em; }
-    #overlay .prompt { font-size: 1.3em; color: #e0c97f; animation: pulse 1.2s infinite; }
-    #overlay .final-score { font-size: 1.8em; margin-bottom: 0.5em; color: #e0c97f; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    #overlay h1 {
+      font-size: clamp(2em, 6vw, 3.2em);
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px #4466ff;
+      margin-bottom: 0.2em;
+    }
+    #overlay .sub  { font-size: 1.05em; color: #778899; }
+    #overlay .final-score { font-size: 2em; color: #e0c97f; margin-top: 0.4em; }
+    #overlay .prompt {
+      font-size: 1.2em; color: #99bbff; margin-top: 1em;
+      animation: blink 1.1s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
-  <div id="score" style="display:none">0</div>
-  <div id="overlay">
-    <h1>🐦‍⬛ Flappy Corvus</h1>
-    <div class="sub">tap or press space to flap</div>
-    <div class="prompt">tap / space to start</div>
-  </div>
+  <div id="score"></div>
+  <div id="overlay"></div>
 
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.js" } }
