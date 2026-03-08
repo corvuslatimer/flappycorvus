@@ -3,29 +3,29 @@ import { GLTFLoader } from './vendor/GLTFLoader.js';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const CFG = {
-  gravity:       -20,
-  flapVel:        8.5,
-  pipeSpeed:      5.2,     // starting speed
-  pipeSpeedMax:   9.5,
-  pipeSpeedGain:  0.12,    // per pipe passed
-  pipeGap:        3.0,
-  pipeInterval:   2.3,     // seconds
-  pipeIntervalMin:1.5,
-  pipeIntervalDec:0.015,   // per pipe passed
-  birdX:         -3,
-  pipeXStart:     9,
-  pipeW:          1.1,
-  floorY:        -5.2,
-  ceilY:          5.2,
+  gravity: -20,
+  flapVel: 8.5,
+  pipeSpeed: 5.2,     // starting speed
+  pipeSpeedMax: 9.5,
+  pipeSpeedGain: 0.12,    // per pipe passed
+  pipeGap: 3.0,
+  pipeInterval: 2.3,     // seconds
+  pipeIntervalMin: 1.5,
+  pipeIntervalDec: 0.015,   // per pipe passed
+  birdX: -3,
+  pipeXStart: 9,
+  pipeW: 1.1,
+  floorY: -5.2,
+  ceilY: 5.2,
 };
 
 // ── Renderer ───────────────────────────────────────────────────────────────
-const canvas   = document.getElementById('canvas');
+const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 
-const scene  = new THREE.Scene();
+const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x080c12);
 scene.fog = new THREE.FogExp2(0x080c12, 0.022);
 
@@ -59,7 +59,7 @@ scene.add(glow); // follows bird loosely
   const geo = new THREE.BufferGeometry();
   const v = [];
   for (let i = 0; i < 1200; i++)
-    v.push((Math.random()-0.5)*80, (Math.random()-0.5)*25, -(Math.random()*12+3));
+    v.push((Math.random() - 0.5) * 80, (Math.random() - 0.5) * 25, -(Math.random() * 12 + 3));
   geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
   scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.055, transparent: true, opacity: 0.7 })));
 }
@@ -75,7 +75,7 @@ function makeSlab(y) {
   scene.add(m);
 }
 makeSlab(CFG.floorY - 0.25);
-makeSlab(CFG.ceilY  + 0.25);
+makeSlab(CFG.ceilY + 0.25);
 
 // ── Pipes ──────────────────────────────────────────────────────────────────
 const PIPE_MAT = new THREE.MeshStandardMaterial({
@@ -100,11 +100,11 @@ function releasePipe(p) {
 }
 
 function spawnPipe() {
-  const range   = (CFG.ceilY - CFG.floorY) - CFG.pipeGap - 2.5;
-  const mid     = (CFG.ceilY + CFG.floorY) / 2;
-  const gapY    = mid + (Math.random() - 0.5) * range;
-  const top     = getPipeMesh();
-  const bot     = getPipeMesh();
+  const range = (CFG.ceilY - CFG.floorY) - CFG.pipeGap - 2.5;
+  const mid = (CFG.ceilY + CFG.floorY) / 2;
+  const gapY = mid + (Math.random() - 0.5) * range;
+  const top = getPipeMesh();
+  const bot = getPipeMesh();
   top.position.set(CFG.pipeXStart, gapY + CFG.pipeGap / 2 + PIPE_H / 2, 0);
   bot.position.set(CFG.pipeXStart, gapY - CFG.pipeGap / 2 - PIPE_H / 2, 0);
   scene.add(top, bot);
@@ -128,7 +128,9 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.load('./assets/Bird_1_by_get3dmodels.glb', (gltf) => {
   birdModel = gltf.scene;
   birdModel.scale.setScalar(0.012);
-  birdModel.rotation.y = Math.PI / 2;
+  birdModel.rotation.y = -Math.PI * 2;
+  birdModel.rotation.x = -Math.PI / 2;
+
   birdModel.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
   birdGroup.add(birdModel);
   birdGroup.remove(fallback);
@@ -147,11 +149,11 @@ function saveHS(s) {
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-let state      = 'idle'; // idle | playing | dead
-let velY       = 0;
-let score      = 0;
-let pipeTimer  = 0;
-let currentSpeed    = CFG.pipeSpeed;
+let state = 'idle'; // idle | playing | dead
+let velY = 0;
+let score = 0;
+let pipeTimer = 0;
+let currentSpeed = CFG.pipeSpeed;
 let currentInterval = CFG.pipeInterval;
 
 
@@ -187,15 +189,15 @@ function resetGame() {
 
   birdGroup.position.set(CFG.birdX, 0, 0);
   birdGroup.rotation.z = 0;
-  velY            = 0;
-  score           = 0;
-  pipeTimer       = 0;
-  currentSpeed    = CFG.pipeSpeed;
+  velY = 0;
+  score = 0;
+  pipeTimer = 0;
+  currentSpeed = CFG.pipeSpeed;
   currentInterval = CFG.pipeInterval;
 
   overlay.style.display = 'none';
   scoreEl.style.display = 'block';
-  scoreEl.textContent   = '0';
+  scoreEl.textContent = '0';
   state = 'playing';
 }
 
@@ -279,7 +281,7 @@ function animate() {
         score++;
         scoreEl.textContent = score;
         // Increase difficulty
-        currentSpeed    = Math.min(CFG.pipeSpeedMax, currentSpeed + CFG.pipeSpeedGain);
+        currentSpeed = Math.min(CFG.pipeSpeedMax, currentSpeed + CFG.pipeSpeedGain);
         currentInterval = Math.max(CFG.pipeIntervalMin, currentInterval - CFG.pipeIntervalDec);
       }
 
