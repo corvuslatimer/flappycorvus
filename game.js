@@ -3,8 +3,8 @@ import { GLTFLoader } from './vendor/GLTFLoader.js';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const CFG = {
-  gravity: -20,
-  flapVel: 8.5,
+  gravity: -26,
+  flapVel: 11,
   pipeSpeed: 5.2,     // starting speed
   pipeSpeedMax: 9.5,
   pipeSpeedGain: 0.12,    // per pipe passed
@@ -228,13 +228,14 @@ window.addEventListener('pointerdown', e => {
 function checkCollision() {
   const by = birdGroup.position.y;
   const bx = CFG.birdX;
-  const br = 0.30;
+  const br = 0.18;       // visual hitbox — tight, forgiving
+  const pipeMargin = 0.1; // extra grace on pipe edges
 
   if (by - br <= CFG.floorY || by + br >= CFG.ceilY) return true;
 
   for (const p of activePipes) {
-    if (Math.abs(bx - p.x) < CFG.pipeW / 2 + br) {
-      if (by > p.gapY + CFG.pipeGap / 2 - br || by < p.gapY - CFG.pipeGap / 2 + br) return true;
+    if (Math.abs(bx - p.x) < CFG.pipeW / 2 + br - pipeMargin) {
+      if (by > p.gapY + CFG.pipeGap / 2 - br + pipeMargin || by < p.gapY - CFG.pipeGap / 2 + br - pipeMargin) return true;
     }
   }
   return false;
