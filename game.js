@@ -190,7 +190,6 @@ function resetGame() {
   velY            = 0;
   score           = 0;
   pipeTimer       = 0;
-  trailTimer      = 0;
   currentSpeed    = CFG.pipeSpeed;
   currentInterval = CFG.pipeInterval;
 
@@ -211,7 +210,6 @@ function die() {
   state = 'dead';
   saveHS(score);
   scoreEl.style.display = 'none';
-  spawnExplosion();
   showDead();
 }
 
