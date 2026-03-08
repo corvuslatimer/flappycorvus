@@ -134,82 +134,7 @@ gltfLoader.load('./assets/Bird_1_by_get3dmodels.glb', (gltf) => {
   birdGroup.remove(fallback);
 });
 
-// ── Trail Particles ────────────────────────────────────────────────────────
-const TRAIL_MAT = new THREE.PointsMaterial({
-  color: 0x6688ee, size: 0.13, transparent: true, depthWrite: false
-});
-const trailParticles = [];
 
-function emitTrail() {
-  const geo = new THREE.BufferGeometry();
-  const v = [];
-  for (let i = 0; i < 8; i++) {
-    v.push(
-      birdGroup.position.x + (Math.random()-0.5)*0.5,
-      birdGroup.position.y + (Math.random()-0.5)*0.5,
-      (Math.random()-0.5)*0.3
-    );
-  }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-  const mat = TRAIL_MAT.clone();
-  const pts = new THREE.Points(geo, mat);
-  pts.userData.life = 0.35;
-  scene.add(pts);
-  trailParticles.push(pts);
-}
-
-function updateTrail(dt) {
-  for (let i = trailParticles.length - 1; i >= 0; i--) {
-    const p = trailParticles[i];
-    p.userData.life -= dt;
-    p.material.opacity = p.userData.life / 0.35;
-    if (p.userData.life <= 0) {
-      scene.remove(p);
-      p.geometry.dispose();
-      p.material.dispose();
-      trailParticles.splice(i, 1);
-    }
-  }
-}
-
-// ── Explosion on death ─────────────────────────────────────────────────────
-const deathParticles = [];
-
-function spawnExplosion() {
-  const geo = new THREE.BufferGeometry();
-  const v = [];
-  for (let i = 0; i < 40; i++) {
-    v.push(
-      birdGroup.position.x + (Math.random()-0.5)*0.8,
-      birdGroup.position.y + (Math.random()-0.5)*0.8,
-      (Math.random()-0.5)*0.8
-    );
-  }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-  const mat = new THREE.PointsMaterial({ color: 0xff5533, size: 0.18, transparent: true });
-  const pts = new THREE.Points(geo, mat);
-  pts.userData.life = 0.8;
-  pts.userData.vel  = new THREE.Vector3(
-    (Math.random()-0.5)*2, (Math.random()-0.5)*2, 0
-  );
-  scene.add(pts);
-  deathParticles.push(pts);
-}
-
-function updateExplosion(dt) {
-  for (let i = deathParticles.length-1; i >= 0; i--) {
-    const p = deathParticles[i];
-    p.userData.life -= dt;
-    p.material.opacity = p.userData.life / 0.8;
-    p.position.addScaledVector(p.userData.vel, dt);
-    if (p.userData.life <= 0) {
-      scene.remove(p);
-      p.geometry.dispose();
-      p.material.dispose();
-      deathParticles.splice(i, 1);
-    }
-  }
-}
 
 // ── Score persistence ──────────────────────────────────────────────────────
 let highScore = parseInt(localStorage.getItem('fc_hs') || '0', 10);
@@ -228,7 +153,7 @@ let score      = 0;
 let pipeTimer  = 0;
 let currentSpeed    = CFG.pipeSpeed;
 let currentInterval = CFG.pipeInterval;
-let trailTimer = 0;
+
 
 const overlay = document.getElementById('overlay');
 const scoreEl = document.getElementById('score');
@@ -279,7 +204,6 @@ function flap() {
   if (state === 'idle' || state === 'dead') { resetGame(); return; }
   if (state === 'playing') {
     velY = CFG.flapVel;
-    emitTrail();
   }
 }
 
@@ -339,10 +263,6 @@ function animate() {
     glow.position.set(CFG.birdX, birdGroup.position.y, 3);
     glow.intensity = 1.2 + Math.sin(Date.now() * 0.005) * 0.3;
 
-    // Trail
-    trailTimer += dt;
-    if (trailTimer > 0.06) { emitTrail(); trailTimer = 0; }
-
     // Pipes
     pipeTimer += dt;
     if (pipeTimer >= currentInterval) {
@@ -376,9 +296,6 @@ function animate() {
     birdGroup.position.y = Math.sin(Date.now() * 0.0018) * 0.6;
     birdGroup.rotation.z = Math.sin(Date.now() * 0.0025) * 0.08;
   }
-
-  updateTrail(dt);
-  updateExplosion(dt);
 
   renderer.render(scene, camera);
 }
