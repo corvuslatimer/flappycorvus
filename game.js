@@ -128,8 +128,7 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.load('./assets/Bird_1_by_get3dmodels.glb', (gltf) => {
   birdModel = gltf.scene;
   birdModel.scale.setScalar(0.012);
-  birdModel.rotation.y = -Math.PI / 2;
-  birdModel.rotation.x = 0;
+  birdModel.rotation.y = Math.PI / 2;
   birdModel.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
   birdGroup.add(birdModel);
   birdGroup.remove(fallback);
